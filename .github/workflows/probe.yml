@@ -1,0 +1,28 @@
+name: sea-x64-intel
+on: [push]
+permissions:
+  contents: read
+jobs:
+  intel:
+    runs-on: macos-26-intel
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Host
+        run: |
+          echo "CPU $(sysctl -n machdep.cpu.brand_string)"; echo "uname $(uname -m)"; echo "translated $(sysctl -n sysctl.proc_translated 2>/dev/null || echo n/a)"; sw_vers
+      - name: Node 26.8.2 darwin-x64 (checksum verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o node.tar.xz https://nodejs.org/dist/v26.8.2/node-v26.8.2-darwin-x64.tar.xz
+          curl -fsSL -o SHASUMS256.txt https://nodejs.org/dist/v26.8.2/SHASUMS256.txt
+          grep ' node-v26.8.2-darwin-x64.tar.xz$' SHASUMS256.txt | sed 's/node-v26.8.2-darwin-x64.tar.xz/node.tar.xz/' | shasum -a 256 -c -
+          mkdir n && tar -xJf node.tar.xz -C n --strip-components 1
+      - name: Control and hello SEA
+        run: |
+          set +e
+          ./n/bin/node -e 'process.exit(0)'; echo "CONTROL plain node exit=$?"
+          printf '%s' '{"main":"hello.js","output":"hello","disableExperimentalSEAWarning":true,"useCodeCache":false,"useSnapshot":false}' > sea.json
+          ./n/bin/node --build-sea sea.json; echo "BUILD exit=$? arch=$(lipo -archs hello)"
+          codesign --sign - --force hello
+          ./hello; st=$?; sig=""; [ $st -gt 128 ] && sig="signal=$((st-128))"; echo "SEA_RUN exit=$st $sig"
