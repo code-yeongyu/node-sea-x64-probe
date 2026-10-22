@@ -11,18 +11,17 @@ jobs:
       - name: Host
         run: |
           echo "CPU $(sysctl -n machdep.cpu.brand_string)"; echo "uname $(uname -m)"; echo "translated $(sysctl -n sysctl.proc_translated 2>/dev/null || echo n/a)"; sw_vers
-      - name: Node 26.8.2 darwin-x64 (checksum verified)
-        run: |
-          set -euo pipefail
-          curl -fsSL -o node.tar.xz https://nodejs.org/dist/v26.8.2/node-v26.8.2-darwin-x64.tar.xz
-          curl -fsSL -o SHASUMS256.txt https://nodejs.org/dist/v26.8.2/SHASUMS256.txt
-          grep ' node-v26.8.2-darwin-x64.tar.xz$' SHASUMS256.txt | sed 's/node-v26.8.2-darwin-x64.tar.xz/node.tar.xz/' | shasum -a 256 -c -
-          mkdir n && tar -xJf node.tar.xz -C n --strip-components 1
-      - name: Control and hello SEA
+      - name: Hello SEA with Node 26.8.2 and 26.12.1 (darwin-x64, checksum verified)
         run: |
           set +e
-          ./n/bin/node -e 'process.exit(0)'; echo "CONTROL plain node exit=$?"
-          printf '%s' '{"main":"hello.js","output":"hello","disableExperimentalSEAWarning":true,"useCodeCache":false,"useSnapshot":false}' > sea.json
-          ./n/bin/node --build-sea sea.json; echo "BUILD exit=$? arch=$(lipo -archs hello)"
-          codesign --sign - --force hello
-          ./hello; st=$?; sig=""; [ $st -gt 128 ] && sig="signal=$((st-128))"; echo "SEA_RUN exit=$st $sig"
+          for v in 26.8.2 26.12.1; do
+            curl -fsSL -o node-$v.tar.xz https://nodejs.org/dist/v$v/node-v$v-darwin-x64.tar.xz
+            curl -fsSL -o S$v.txt https://nodejs.org/dist/v$v/SHASUMS256.txt
+            grep " node-v$v-darwin-x64.tar.xz$" S$v.txt | sed "s/node-v$v-darwin-x64.tar.xz/node-$v.tar.xz/" | shasum -a 256 -c - || exit 1
+            mkdir n$v && tar -xJf node-$v.tar.xz -C n$v --strip-components 1
+            ./n$v/bin/node -e 'process.exit(0)'; echo "CONTROL $v plain node exit=$?"
+            printf '%s' '{"main":"hello.js","output":"hello'$v'","disableExperimentalSEAWarning":true,"useCodeCache":false,"useSnapshot":false}' > sea$v.json
+            ./n$v/bin/node --build-sea sea$v.json; echo "BUILD $v exit=$?"
+            codesign --sign - --force hello$v
+            ./hello$v; st=$?; sig=""; [ $st -gt 128 ] && sig="signal=$((st-128))"; echo "SEA_RUN $v exit=$st $sig"
+          done
